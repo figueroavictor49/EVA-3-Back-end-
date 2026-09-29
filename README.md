@@ -187,7 +187,7 @@ El endpoint `POST /api/v1/despachos/` evalúa de forma estricta las cuatro condi
 El proyecto incluye dos mecanismos integrales de verificación:
 
 ### 1. Suite de Pruebas Automatizadas con Django (`tests.py`)
-Ejecute las 16 pruebas automatizadas:
+Ejecute las 24 pruebas automatizadas:
 ```bash
 python manage.py test
 ```
@@ -196,8 +196,41 @@ Las pruebas verifican:
 - Flujo de tokens JWT y permisos diferenciados usuario/administrador (Rúbrica 3.1.2).
 - Formato consistente de respuestas JSON y captura de errores normalizados (Rúbrica 3.1.3).
 - Operaciones CRUD completas y verificación de los 4 casos de negocio de Ev1 (Rúbrica 3.1.4).
+- Comando de gestión de datos iniciales, acciones personalizadas, validaciones y modelos.
 
-### 2. Pruebas con Cliente HTTP
+### 2. Medición de Cobertura de Código (> 80% requerido, 97% alcanzado)
+Para auditar la cobertura de pruebas sobre la aplicación `core`:
+```bash
+coverage run --source='core' manage.py test
+coverage report
+```
+
+**Resultado de la auditoría de cobertura:**
+```text
+Name                                                 Stmts   Miss  Cover
+------------------------------------------------------------------------
+core\__init__.py                                         0      0   100%
+core\admin.py                                           15      0   100%
+core\apps.py                                             5      0   100%
+core\exceptions.py                                      25      4    84%
+core\management\__init__.py                              0      0   100%
+core\management\commands\__init__.py                     0      0   100%
+core\management\commands\cargar_datos_iniciales.py      41      4    90%
+core\migrations\0001_initial.py                          7      0   100%
+core\migrations\__init__.py                              0      0   100%
+core\models.py                                          34      0   100%
+core\pagination.py                                       8      0   100%
+core\permissions.py                                     14      0   100%
+core\serializers.py                                     59      3    95%
+core\services.py                                        24      1    96%
+core\tests.py                                          258      0   100%
+core\urls.py                                             8      0   100%
+core\views.py                                           90      6    93%
+------------------------------------------------------------------------
+TOTAL                                                  588     18    97%
+```
+
+### 3. Pruebas con Cliente HTTP
 En la raíz del proyecto se incluyen dos archivos listos para interactuar con la API:
 - **`pruebas_api.http`:** Colección para ejecutar directamente en VS Code con la extensión *REST Client* o *Thunder Client*.
 - **`postman_collection.json`:** Colección en formato v2.1 importable en Postman o Insomnia con variables y scripts de prueba configurados.

@@ -134,11 +134,11 @@ A continuación se documenta el análisis crítico de las recomendaciones emitid
 
 ---
 
-## 5. Verificación de la Pertinencia mediante Pruebas Automatizadas
+## 5. Verificación de la Pertinencia mediante Pruebas Automatizadas y Cobertura (> 80%)
 
-La efectividad de las recomendaciones adoptadas fue validada mediante una suite de 16 pruebas automatizadas (`core/tests.py`) ejecutadas con el cliente de pruebas `rest_framework.test.APITestCase`:
+La efectividad de las recomendaciones adoptadas fue validada mediante una suite de 24 pruebas automatizadas (`core/tests.py`) ejecutadas con el cliente de pruebas `rest_framework.test.APITestCase` y auditadas mediante la herramienta oficial `coverage`:
 
-1. **Configuración DRF y Routers:** Verificación de rutas de ViewSets, formato de contenido `application/json` y metadatos de paginación.
+1. **Configuración DRF y Routers:** Verificación de rutas de ViewSets, formato de contenido `application/json` y metadatos de paginación enriquecida.
 2. **Seguridad y JWT:** Emisión de pares de tokens, renovación exitosa mediante endpoint de refresco y rechazo con código 401 de peticiones no autorizadas.
 3. **Permisos Diferenciados:** Confirmación de que operadores reciben código 403 Forbidden al intentar crear productos y administradores reciben código 201 Created.
 4. **Respuestas JSON y Errores:** Validación de formato estructurado en errores 404 y filtros por estado de movimiento.
@@ -147,5 +147,27 @@ La efectividad de las recomendaciones adoptadas fue validada mediante una suite 
    - *Caso 2 (Rechazado):* Cantidad > 50 -> Código 200 con estado 'Rechazado' y stock intacto.
    - *Caso 3 (Rechazado):* Cantidad > stock -> Código 200 con estado 'Rechazado' y stock intacto.
    - *Caso 4 (Aceptado):* Cantidad válida -> Código 201 Created, estado 'Aceptado' y descuento atómico del stock.
+6. **Manejo de Comandos y Modelos:** Verificación del comando `cargar_datos_iniciales`, métodos `__str__`, acciones personalizadas y serializadores.
 
-Resultado de la verificación: **16/16 pruebas superadas (OK)**.
+### Métrica de Cobertura sobre la Aplicación `core`:
+```text
+Name                                                 Stmts   Miss  Cover
+------------------------------------------------------------------------
+core\__init__.py                                         0      0   100%
+core\admin.py                                           15      0   100%
+core\apps.py                                             5      0   100%
+core\exceptions.py                                      25      4    84%
+core\management\commands\cargar_datos_iniciales.py      41      4    90%
+core\models.py                                          34      0   100%
+core\pagination.py                                       8      0   100%
+core\permissions.py                                     14      0   100%
+core\serializers.py                                     59      3    95%
+core\services.py                                        24      1    96%
+core\tests.py                                          258      0   100%
+core\urls.py                                             8      0   100%
+core\views.py                                           90      6    93%
+------------------------------------------------------------------------
+TOTAL                                                  588     18    97%
+```
+
+Resultado de la verificación: **24/24 pruebas superadas (OK) con 97% de cobertura sobre el core de la aplicación (superando holgadamente el 80% exigido)**.

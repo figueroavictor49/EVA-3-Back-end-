@@ -287,3 +287,140 @@ class ApiRESTfulYReglasNegocioTests(APITestCase):
         respuesta = self.client.get(reverse('resumen'))
         self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
         self.assertContains(respuesta, "arroz")
+
+
+class CoberturaIntegralTests(APITestCase):
+    """
+    Pruebas adicionales para garantizar una cobertura superior al 95% en la aplicación core:
+    - Comando de gestión cargar_datos_iniciales
+    - Registro de usuarios y consulta de perfil
+    - Métodos __str__ de modelos
+    - Acciones de estadísticas y movimientos por producto
+    - Validaciones de serializadores
+    - Clases de permisos personalizadas
+    """
+    def setUp(self):
+        self.user = User.objects.create_user(username='tester_cobertura', password='Password123!', email='cobertura@test.cl')
+        self.admin = User.objects.create_superuser(username='super_cobertura', password='Password123!', email='super@test.cl')
+        self.producto = Producto.objects.create(nombre="Porotos Burros", stock=60, precio=1890.0)
+
+    def test_comando_cargar_datos_iniciales(self):
+        from django.core.management import call_command
+        from io import StringIO
+        out = StringIO()
+        call_command('cargar_datos_iniciales', stdout=out)
+        salida = out.getvalue()
+        self.assertIn("Carga inicial completada", salida)
+
+    def test_registro_nuevo_usuario(self):
+        url = reverse('auth-registro')
+        payload = {
+            'username': 'usuario_creado_en_test',
+            'email': 'creado@test.cl',
+            'password': 'ClaveSegura123!'
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(User.objects.filter(username='usuario_creado_en_test').exists())
+
+    def test_perfil_usuario(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('auth-perfil')
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()['username'], 'tester_cobertura')
+
+    def test_accion_movimientos_por_producto(self):
+        self.client.force_authenticate(user=self.user)
+        MovimientoInventario.objects.create(
+            producto=self.producto,
+            cantidad_solicitada=10,
+            stock_previo=60,
+            stock_resultante=50,
+            estado='Aceptado',
+            motivo='Despacho probado'
+        )
+        url = reverse('producto-movimientos', kwargs={'pk': self.producto.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.json()['results']), 1)
+
+    def test_accion_estadisticas_movimientos(self):
+        self.client.force_authenticate(user=self.user)
+        MovimientoInventario.objects.create(
+            producto=self.producto,
+            cantidad_solicitada=5,
+            stock_previo=60,
+            stock_resultante=55,
+            estado='Aceptado',
+            motivo='OK'
+        )
+        url = reverse('movimiento-estadisticas')
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        datos = res.json()
+        self.assertIn('total_movimientos', datos)
+        self.assertIn('aceptados', datos)
+        self.assertIn('rechazados', datos)
+        self.assertIn('invalidos', datos)
+
+    def test_modelos_representacion_str(self):
+        str_prod = str(self.producto)
+        self.assertIn("Porotos Burros", str_prod)
+        self.assertIn("60", str_prod)
+
+        mov = MovimientoInventario.objects.create(
+            producto=self.producto,
+            cantidad_solicitada=15,
+            stock_previo=60,
+            stock_resultante=45,
+            estado='Aceptado',
+            motivo='Test str'
+        )
+        str_mov = str(mov)
+        self.assertIn("Aceptado", str_mov)
+        self.assertIn("Porotos Burros", str_mov)
+
+    def test_validaciones_negativas_serializador_producto(self):
+        from core.serializers import ProductoSerializer
+        # Stock negativo
+        ser_stock = ProductoSerializer(data={'nombre': 'Test Inv', 'stock': -5, 'precio': 100})
+        self.assertFalse(ser_stock.is_valid())
+        self.assertIn('stock', ser_stock.errors)
+
+        # Precio negativo
+        ser_precio = ProductoSerializer(data={'nombre': 'Test Inv', 'stock': 10, 'precio': -100})
+        self.assertFalse(ser_precio.is_valid())
+        self.assertIn('precio', ser_precio.errors)
+
+        # Nombre vacío
+        ser_nombre = ProductoSerializer(data={'nombre': '   ', 'stock': 10, 'precio': 100})
+        self.assertFalse(ser_nombre.is_valid())
+        self.assertIn('nombre', ser_nombre.errors)
+
+    def test_permisos_personalizados_directos(self):
+        from core.permissions import IsAuthenticatedOrReadOnlyCustom, SoloAdministradores
+        from unittest.mock import MagicMock
+
+        perm_read_only = IsAuthenticatedOrReadOnlyCustom()
+        perm_admin = SoloAdministradores()
+
+        # Request seguro no autenticado
+        req_safe = MagicMock()
+        req_safe.method = 'GET'
+        req_safe.user.is_authenticated = False
+        self.assertTrue(perm_read_only.has_permission(req_safe, None))
+
+        # Request inseguro usuario normal
+        req_unsafe = MagicMock()
+        req_unsafe.method = 'POST'
+        req_unsafe.user.is_authenticated = True
+        req_unsafe.user.is_staff = False
+        req_unsafe.user.is_superuser = False
+        self.assertTrue(perm_read_only.has_permission(req_unsafe, None))
+        self.assertFalse(perm_admin.has_permission(req_unsafe, None))
+
+        # Request inseguro admin
+        req_unsafe.user.is_staff = True
+        self.assertTrue(perm_admin.has_permission(req_unsafe, None))
+
