@@ -1,0 +1,9 @@
+[
+  {
+    "producto": "arroz",
+    "stock_actual": 100,
+    "cantidad_solicitada": 50,
+    "estado": "Aceptado",
+    "motivo": "Solicitud aprobada y lista para despacho."
+  }
+]

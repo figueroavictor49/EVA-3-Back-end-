@@ -1,0 +1,229 @@
+### ==============================================================================
+### COLECCIÓN DE PRUEBAS EN CLIENTE HTTP (RÚBRICA 3.1.3)
+### Compatible con extensiones REST Client de VS Code, Thunder Client, Postman y JetBrains
+### ==============================================================================
+
+@baseUrl = http://127.0.0.1:8000/api/v1
+
+### -----------------------------------------------------------------------------
+### 1. AUTENTICACIÓN JWT (RÚBRICA 3.1.2)
+### -----------------------------------------------------------------------------
+
+### 1.1 Registrar un nuevo usuario (Público)
+# @name registrarUsuario
+POST {{baseUrl}}/auth/registro/
+Content-Type: application/json
+
+{
+  "username": "tester_bodega",
+  "email": "tester@bodega.cl",
+  "password": "Password123!"
+}
+
+### 1.2 Obtener Tokens JWT (Login con usuario estándar)
+# @name loginOperador
+POST {{baseUrl}}/auth/token/
+Content-Type: application/json
+
+{
+  "username": "operador",
+  "password": "operador123"
+}
+
+### Guardar token del operador
+@operadorToken = {{loginOperador.response.body.access}}
+@operadorRefresh = {{loginOperador.response.body.refresh}}
+
+### 1.3 Obtener Tokens JWT (Login con usuario Administrador)
+# @name loginAdmin
+POST {{baseUrl}}/auth/token/
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Guardar token del admin
+@adminToken = {{loginAdmin.response.body.access}}
+
+### 1.4 Refrescar Access Token expirado usando Refresh Token
+POST {{baseUrl}}/auth/token/refresh/
+Content-Type: application/json
+
+{
+  "refresh": "{{operadorRefresh}}"
+}
+
+### 1.5 Verificar validez de un token
+POST {{baseUrl}}/auth/token/verify/
+Content-Type: application/json
+
+{
+  "token": "{{operadorToken}}"
+}
+
+### 1.6 Consultar perfil del usuario autenticado
+GET {{baseUrl}}/auth/perfil/
+Authorization: Bearer {{operadorToken}}
+
+### -----------------------------------------------------------------------------
+### 2. GESTIÓN DE PRODUCTOS - RESTful CRUD & FILTROS (RÚBRICAS 3.1.1, 3.1.3, 3.1.4)
+### -----------------------------------------------------------------------------
+
+### 2.1 Listar todos los productos (Paginación por defecto)
+GET {{baseUrl}}/productos/
+
+### 2.2 Listar productos con Paginación personalizada (?page=1&page_size=3)
+GET {{baseUrl}}/productos/?page=1&page_size=3
+
+### 2.3 Búsqueda de producto por texto (?search=arroz)
+GET {{baseUrl}}/productos/?search=arroz
+
+### 2.4 Ordenar productos por precio descendente (?ordering=-precio)
+GET {{baseUrl}}/productos/?ordering=-precio
+
+### 2.5 Consultar detalle de un producto específico (ID 1)
+GET {{baseUrl}}/productos/1/
+
+### 2.6 Intentar crear producto sin permisos de Admin (Operador -> 403 Forbidden)
+POST {{baseUrl}}/productos/
+Authorization: Bearer {{operadorToken}}
+Content-Type: application/json
+
+{
+  "nombre": "Atún en lata 160g",
+  "descripcion": "Atún desmenuzado en agua",
+  "stock": 100,
+  "precio": 1490.00
+}
+
+### 2.7 Crear producto con cuenta Administrador (Admin -> 201 Created)
+# @name crearProductoAdmin
+POST {{baseUrl}}/productos/
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "nombre": "Atún en lata 160g",
+  "descripcion": "Atún desmenuzado al agua",
+  "stock": 100,
+  "precio": 1490.00
+}
+
+@nuevoProductoId = {{crearProductoAdmin.response.body.id}}
+
+### 2.8 Actualizar completamente el producto (PUT)
+PUT {{baseUrl}}/productos/{{nuevoProductoId}}/
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "nombre": "Atún en lata en aceite 160g",
+  "descripcion": "Atún en lomitos en aceite vegetal",
+  "stock": 95,
+  "precio": 1590.00
+}
+
+### 2.9 Actualizar parcialmente el stock (PATCH)
+PATCH {{baseUrl}}/productos/{{nuevoProductoId}}/
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "stock": 85
+}
+
+### 2.10 Eliminar producto (DELETE -> 204 No Content)
+DELETE {{baseUrl}}/productos/{{nuevoProductoId}}/
+Authorization: Bearer {{adminToken}}
+
+### -----------------------------------------------------------------------------
+### 3. DESPACHOS Y LAS 4 REGLAS DE NEGOCIO (RÚBRICAS 3.1.3 Y 3.1.4)
+### -----------------------------------------------------------------------------
+
+### 3.1 Intento de despacho sin autenticación (-> 401 Unauthorized)
+POST {{baseUrl}}/despachos/
+Content-Type: application/json
+
+{
+  "producto_id": 1,
+  "cantidad_solicitada": 10
+}
+
+### 3.2 Regla 1 (Inválido): Cantidad <= 0 (-> 400 Bad Request)
+POST {{baseUrl}}/despachos/
+Authorization: Bearer {{operadorToken}}
+Content-Type: application/json
+
+{
+  "producto_id": 1,
+  "cantidad_solicitada": 0
+}
+
+### 3.3 Regla 2 (Rechazado): Cantidad > 50 (Límite máximo por transacción)
+POST {{baseUrl}}/despachos/
+Authorization: Bearer {{operadorToken}}
+Content-Type: application/json
+
+{
+  "producto_id": 1,
+  "cantidad_solicitada": 55
+}
+
+### 3.4 Regla 3 (Rechazado): Cantidad solicitada supera el stock disponible
+POST {{baseUrl}}/despachos/
+Authorization: Bearer {{operadorToken}}
+Content-Type: application/json
+
+{
+  "producto_id": 5,
+  "cantidad_solicitada": 40
+}
+
+### 3.5 Regla 4 (Aceptado): Solicitud válida (<= stock y <= 50) -> Descuenta stock
+POST {{baseUrl}}/despachos/
+Authorization: Bearer {{operadorToken}}
+Content-Type: application/json
+
+{
+  "producto_id": 1,
+  "cantidad_solicitada": 25
+}
+
+### -----------------------------------------------------------------------------
+### 4. AUDITORÍA HISTÓRICA DE MOVIMIENTOS (RÚBRICA 3.1.3)
+### -----------------------------------------------------------------------------
+
+### 4.1 Listar historial de movimientos (Paginado)
+GET {{baseUrl}}/movimientos/
+Authorization: Bearer {{operadorToken}}
+
+### 4.2 Filtrar movimientos por estado 'Aceptado'
+GET {{baseUrl}}/movimientos/?estado=Aceptado
+Authorization: Bearer {{operadorToken}}
+
+### 4.3 Filtrar movimientos por estado 'Rechazado'
+GET {{baseUrl}}/movimientos/?estado=Rechazado
+Authorization: Bearer {{operadorToken}}
+
+### 4.4 Ver estadísticas agregadas de transacciones
+GET {{baseUrl}}/movimientos/estadisticas/
+Authorization: Bearer {{operadorToken}}
+
+### 4.5 Ver movimientos de un producto específico (ID 1)
+GET {{baseUrl}}/productos/1/movimientos/
+Authorization: Bearer {{operadorToken}}
+
+### -----------------------------------------------------------------------------
+### 5. DOCUMENTACIÓN Y VISTAS WEB
+### -----------------------------------------------------------------------------
+
+### 5.1 Esquema OpenAPI 3.0 en YAML/JSON
+GET http://127.0.0.1:8000/api/schema/
+
+### 5.2 Interfaz Swagger UI
+GET http://127.0.0.1:8000/api/docs/
+
+### 5.3 Vista Web Resumen HTML (Heredada de Ev1)
+GET http://127.0.0.1:8000/resumen/

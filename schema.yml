@@ -1,0 +1,967 @@
+openapi: 3.0.3
+info:
+  title: API de Control de Inventario y Despachos - EVA 3
+  version: 1.0.0
+  description: |-
+    API RESTful robusta y documentada basada en el sistema de inventario Ev1.
+
+    Permite gestionar catálogo de productos, procesamiento de solicitudes de salida con las 4 reglas de negocio, historial auditable de movimientos y autenticación JWT.
+paths:
+  /api/v1/auth/perfil/:
+    get:
+      operationId: v1_auth_perfil_retrieve
+      description: Endpoint para consultar el perfil del usuario autenticado actual.
+      summary: Obtener perfil de usuario actual
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/auth/registro/:
+    post:
+      operationId: v1_auth_registro_create
+      description: Endpoint público para crear nuevas cuentas de usuario en el sistema.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroUsuarioRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegistroUsuarioRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegistroUsuarioRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroUsuario'
+          description: ''
+  /api/v1/auth/token/:
+    post:
+      operationId: v1_auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: v1_auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/auth/token/verify/:
+    post:
+      operationId: v1_auth_token_verify_create
+      description: |-
+        Takes a token and indicates if it is valid.  This view provides no
+        information about a token's fitness for a particular use.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /api/v1/despachos/:
+    post:
+      operationId: v1_despachos_create
+      description: |-
+        Evalúa la solicitud de retiro de stock según las reglas de negocio:
+        - Inválido: cantidad <= 0 o stock < 0 (Código 400)
+        - Rechazado: cantidad > 50 (Código 200 con estado 'Rechazado')
+        - Rechazado: cantidad > stock disponible (Código 200 con estado 'Rechazado')
+        - Aceptado: cantidad <= stock disponible (Código 201 y descuenta stock)
+      summary: Solicitar despacho de inventario
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDespachoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SolicitudDespachoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SolicitudDespachoRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoDespacho'
+          description: ''
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoDespacho'
+          description: ''
+        '400':
+          description: Parámetros inválidos
+  /api/v1/movimientos/:
+    get:
+      operationId: v1_movimientos_list
+      description: |-
+        Endpoint de sólo lectura para consultar la auditoría histórica de movimientos y despachos.
+        Protegido: Requiere autenticación JWT.
+      parameters:
+      - in: query
+        name: estado
+        schema:
+          type: string
+          title: Estado de la transacción
+          enum:
+          - Aceptado
+          - Inválido
+          - Rechazado
+        description: |-
+          * `Aceptado` - Aceptado
+          * `Rechazado` - Rechazado
+          * `Inválido` - Inválido
+      - name: ordering
+        required: false
+        in: query
+        description: Qué campo usar para ordenar los resultados.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Número de resultados a devolver por página.
+        schema:
+          type: integer
+      - in: query
+        name: producto
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMovimientoInventarioList'
+          description: ''
+  /api/v1/movimientos/{id}/:
+    get:
+      operationId: v1_movimientos_retrieve
+      description: |-
+        Endpoint de sólo lectura para consultar la auditoría histórica de movimientos y despachos.
+        Protegido: Requiere autenticación JWT.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este Movimiento de Inventario.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientoInventario'
+          description: ''
+  /api/v1/movimientos/estadisticas/:
+    get:
+      operationId: v1_movimientos_estadisticas_retrieve
+      description: Devuelve el conteo general de solicitudes agrupadas por estado
+        (Aceptado, Rechazado, Inválido).
+      summary: Estadísticas de movimientos
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Resumen cuantitativo de transacciones
+  /api/v1/productos/:
+    get:
+      operationId: v1_productos_list
+      description: |-
+        CRUD completo para el catálogo de productos en inventario.
+        - Lectura (GET): Abierta a clientes / usuarios autenticados.
+        - Escritura (POST, PUT, PATCH, DELETE): Exclusiva para Staff / Administradores.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Qué campo usar para ordenar los resultados.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Número de resultados a devolver por página.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      - in: query
+        name: stock
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProductoList'
+          description: ''
+    post:
+      operationId: v1_productos_create
+      description: |-
+        CRUD completo para el catálogo de productos en inventario.
+        - Lectura (GET): Abierta a clientes / usuarios autenticados.
+        - Escritura (POST, PUT, PATCH, DELETE): Exclusiva para Staff / Administradores.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProductoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProductoRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Producto'
+          description: ''
+  /api/v1/productos/{id}/:
+    get:
+      operationId: v1_productos_retrieve
+      description: |-
+        CRUD completo para el catálogo de productos en inventario.
+        - Lectura (GET): Abierta a clientes / usuarios autenticados.
+        - Escritura (POST, PUT, PATCH, DELETE): Exclusiva para Staff / Administradores.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este Producto.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Producto'
+          description: ''
+    put:
+      operationId: v1_productos_update
+      description: |-
+        CRUD completo para el catálogo de productos en inventario.
+        - Lectura (GET): Abierta a clientes / usuarios autenticados.
+        - Escritura (POST, PUT, PATCH, DELETE): Exclusiva para Staff / Administradores.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este Producto.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProductoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProductoRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Producto'
+          description: ''
+    patch:
+      operationId: v1_productos_partial_update
+      description: |-
+        CRUD completo para el catálogo de productos en inventario.
+        - Lectura (GET): Abierta a clientes / usuarios autenticados.
+        - Escritura (POST, PUT, PATCH, DELETE): Exclusiva para Staff / Administradores.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este Producto.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProductoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProductoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProductoRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Producto'
+          description: ''
+    delete:
+      operationId: v1_productos_destroy
+      description: |-
+        CRUD completo para el catálogo de productos en inventario.
+        - Lectura (GET): Abierta a clientes / usuarios autenticados.
+        - Escritura (POST, PUT, PATCH, DELETE): Exclusiva para Staff / Administradores.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este Producto.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/productos/{id}/movimientos/:
+    get:
+      operationId: v1_productos_movimientos_list
+      description: Obtiene el historial de despachos asociados a un producto específico.
+      summary: Listar movimientos de un producto
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este Producto.
+        required: true
+      - name: ordering
+        required: false
+        in: query
+        description: Qué campo usar para ordenar los resultados.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Número de resultados a devolver por página.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      - in: query
+        name: stock
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMovimientoInventarioList'
+          description: ''
+components:
+  schemas:
+    EstadoEnum:
+      enum:
+      - Aceptado
+      - Rechazado
+      - Inválido
+      type: string
+      description: |-
+        * `Aceptado` - Aceptado
+        * `Rechazado` - Rechazado
+        * `Inválido` - Inválido
+    MovimientoInventario:
+      type: object
+      description: |-
+        Serializador para el registro de auditoría de movimientos de inventario.
+        Incluye detalles legibles del producto y del usuario responsable.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        producto:
+          type: integer
+          title: Producto asociado
+        producto_nombre:
+          type: string
+          title: Nombre del producto
+          description: Nombre descriptivo único del producto.
+          readOnly: true
+        cantidad_solicitada:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          description: Número de unidades pedidas en la transacción.
+        stock_previo:
+          type: integer
+          readOnly: true
+          description: Stock en bodega antes de evaluar la transacción.
+        stock_resultante:
+          type: integer
+          readOnly: true
+          description: Stock en bodega después de procesar la solicitud.
+        estado:
+          allOf:
+          - $ref: '#/components/schemas/EstadoEnum'
+          readOnly: true
+          title: Estado de la transacción
+        motivo:
+          type: string
+          readOnly: true
+          title: Motivo de la resolución
+          description: Justificación detallada de la aprobación o motivo del rechazo.
+        usuario:
+          type: integer
+          nullable: true
+          title: Usuario responsable
+        usuario_nombre:
+          type: string
+          title: Nombre de usuario
+          description: 'Requerido. 150 carácteres como máximo. Únicamente letras,
+            dígitos y @/./+/-/_ '
+          readOnly: true
+        fecha_registro:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Fecha y hora de registro
+      required:
+      - cantidad_solicitada
+      - estado
+      - fecha_registro
+      - id
+      - motivo
+      - producto
+      - producto_nombre
+      - stock_previo
+      - stock_resultante
+      - usuario_nombre
+    PaginatedMovimientoInventarioList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MovimientoInventario'
+    PaginatedProductoList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Producto'
+    PatchedProductoRequest:
+      type: object
+      description: Serializador CRUD para el modelo Producto con validaciones de negocio.
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          title: Nombre del producto
+          description: Nombre descriptivo único del producto.
+          maxLength: 150
+        descripcion:
+          type: string
+          title: Descripción
+          description: Detalles o especificaciones adicionales del producto.
+        stock:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Stock disponible
+          description: Cantidad actual de unidades disponibles en bodega.
+        precio:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          title: Precio unitario
+          description: Precio de venta unitario en CLP.
+    Producto:
+      type: object
+      description: Serializador CRUD para el modelo Producto con validaciones de negocio.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        nombre:
+          type: string
+          title: Nombre del producto
+          description: Nombre descriptivo único del producto.
+          maxLength: 150
+        descripcion:
+          type: string
+          title: Descripción
+          description: Detalles o especificaciones adicionales del producto.
+        stock:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Stock disponible
+          description: Cantidad actual de unidades disponibles en bodega.
+        precio:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          title: Precio unitario
+          description: Precio de venta unitario en CLP.
+        creado_en:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Fecha de creación
+        actualizado_en:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Última actualización
+      required:
+      - actualizado_en
+      - creado_en
+      - id
+      - nombre
+    ProductoRequest:
+      type: object
+      description: Serializador CRUD para el modelo Producto con validaciones de negocio.
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          title: Nombre del producto
+          description: Nombre descriptivo único del producto.
+          maxLength: 150
+        descripcion:
+          type: string
+          title: Descripción
+          description: Detalles o especificaciones adicionales del producto.
+        stock:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Stock disponible
+          description: Cantidad actual de unidades disponibles en bodega.
+        precio:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          title: Precio unitario
+          description: Precio de venta unitario en CLP.
+      required:
+      - nombre
+    RegistroUsuario:
+      type: object
+      description: Serializador para registrar nuevos usuarios con almacenamiento
+        seguro de contraseñas (hashing).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          title: Nombre de usuario
+          description: 'Requerido. 150 carácteres como máximo. Únicamente letras,
+            dígitos y @/./+/-/_ '
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          title: Dirección de correo electrónico
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        is_staff:
+          type: boolean
+          default: false
+          title: Es staff
+          description: Indica si el usuario puede entrar en este sitio de administración.
+      required:
+      - id
+      - username
+    RegistroUsuarioRequest:
+      type: object
+      description: Serializador para registrar nuevos usuarios con almacenamiento
+        seguro de contraseñas (hashing).
+      properties:
+        username:
+          type: string
+          minLength: 1
+          title: Nombre de usuario
+          description: 'Requerido. 150 carácteres como máximo. Únicamente letras,
+            dígitos y @/./+/-/_ '
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          title: Dirección de correo electrónico
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        password:
+          type: string
+          writeOnly: true
+          minLength: 6
+          description: Contraseña segura (mínimo 6 caracteres).
+        is_staff:
+          type: boolean
+          default: false
+          title: Es staff
+          description: Indica si el usuario puede entrar en este sitio de administración.
+      required:
+      - password
+      - username
+    ResultadoDespacho:
+      type: object
+      description: Serializador de salida consistente para el resultado del despacho
+        de inventario.
+      properties:
+        exito:
+          type: boolean
+        estado:
+          type: string
+        motivo:
+          type: string
+        producto_id:
+          type: integer
+        producto_nombre:
+          type: string
+        cantidad_solicitada:
+          type: integer
+        stock_previo:
+          type: integer
+        stock_resultante:
+          type: integer
+        movimiento_id:
+          type: integer
+        fecha_registro:
+          type: string
+          format: date-time
+      required:
+      - cantidad_solicitada
+      - estado
+      - exito
+      - fecha_registro
+      - motivo
+      - movimiento_id
+      - producto_id
+      - producto_nombre
+      - stock_previo
+      - stock_resultante
+    SolicitudDespachoRequest:
+      type: object
+      description: Serializador de entrada para solicitar salidas de inventario (Despachos).
+      properties:
+        producto_id:
+          type: integer
+          description: ID numérico del producto a despachar.
+        cantidad_solicitada:
+          type: integer
+          description: Cantidad de unidades a retirar de bodega.
+      required:
+      - cantidad_solicitada
+      - producto_id
+    TokenObtainPair:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    TokenObtainPairRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - password
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    TokenVerifyRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - token
+    User:
+      type: object
+      description: Serializador de lectura para usuarios del sistema.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+          title: Nombre de usuario
+          description: 'Requerido. 150 carácteres como máximo. Únicamente letras,
+            dígitos y @/./+/-/_ '
+        email:
+          type: string
+          format: email
+          readOnly: true
+          title: Dirección de correo electrónico
+        is_staff:
+          type: boolean
+          readOnly: true
+          title: Es staff
+          description: Indica si el usuario puede entrar en este sitio de administración.
+        is_active:
+          type: boolean
+          readOnly: true
+          title: Activo
+          description: Indica si el usuario debe ser tratado como activo. Desmarque
+            esta opción en lugar de borrar la cuenta.
+        date_joined:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Fecha de alta
+      required:
+      - date_joined
+      - email
+      - id
+      - is_active
+      - is_staff
+      - username
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
